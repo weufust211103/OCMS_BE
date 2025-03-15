@@ -8,9 +8,8 @@ using System.Threading.Tasks;
 
 namespace OCMS_Services.IService
 {
-    public interface IUserService
+    public interface IAuthenticationService
     {
-        Task<UserModel> GetUserByIdAsync(string id);
-        Task<IEnumerable<UserModel>> GetAllUsersAsync();        
+        Task<LoginResModel> LoginAsync(LoginModel loginDto);
     }
 }
