@@ -1,4 +1,4 @@
-﻿using OCMS_BOs.ResponseModel;
+﻿using OCMS_BOs.Entities;
 using OCMS_BOs.ViewModel;
 using System;
 using System.Collections.Generic;
@@ -8,9 +8,8 @@ using System.Threading.Tasks;
 
 namespace OCMS_Services.IService
 {
-    public interface IUserService
+    public interface IDepartmentService
     {
-        Task<UserModel> GetUserByIdAsync(string id);
-        Task<IEnumerable<UserModel>> GetAllUsersAsync();        
+        Task<IEnumerable<Department>> GetAllDepartmentsAsync();
     }
 }
