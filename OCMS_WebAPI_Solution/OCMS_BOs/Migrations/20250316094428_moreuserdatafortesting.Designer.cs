@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OCMS_BOs;
@@ -11,9 +12,11 @@ using OCMS_BOs;
 namespace OCMS_BOs.Migrations
 {
     [DbContext(typeof(OCMSDbContext))]
-    partial class OCMSDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250316094428_moreuserdatafortesting")]
+    partial class moreuserdatafortesting
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -72,6 +75,9 @@ namespace OCMS_BOs.Migrations
 
                     b.Property<string>("Email")
                         .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ExternalCertificate")
                         .HasColumnType("text");
 
                     b.Property<string>("FullName")
@@ -1610,7 +1616,7 @@ namespace OCMS_BOs.Migrations
             modelBuilder.Entity("OCMS_BOs.Entities.ExternalCertificate", b =>
                 {
                     b.HasOne("OCMS_BOs.Entities.Candidate", "Candidate")
-                        .WithMany("ExternalCertificate")
+                        .WithMany()
                         .HasForeignKey("CandidateId");
 
                     b.HasOne("OCMS_BOs.Entities.User", "User")
@@ -1861,11 +1867,6 @@ namespace OCMS_BOs.Migrations
                     b.Navigation("Role");
 
                     b.Navigation("Specialty");
-                });
-
-            modelBuilder.Entity("OCMS_BOs.Entities.Candidate", b =>
-                {
-                    b.Navigation("ExternalCertificate");
                 });
 
             modelBuilder.Entity("OCMS_BOs.Entities.Department", b =>
