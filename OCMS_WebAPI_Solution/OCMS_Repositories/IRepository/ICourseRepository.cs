@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 
 namespace OCMS_Repositories.IRepository
 {
-    public interface ITrainingPlanRepository
+    public interface ICourseRepository 
     {
         Task<bool> ExistsAsync(string id);
-        Task<TrainingPlan?> GetLastTrainingPlanAsync(string specialtyId, string seasonCode, string year, PlanLevel planLevel);
+        Task<Course?> GetLastObjectIdAsync();
     }
 }
