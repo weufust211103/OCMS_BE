@@ -10,16 +10,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace OCMS_Repositories.Repository
 {
-    public class TrainingScheduleRepository : GenericRepository<TrainingSchedule>, ITrainingScheduleRepository
+    public class InstructorAssignmentRepository : GenericRepository<InstructorAssignment>, IInstructorAssignmentRepository
     {
         private readonly OCMSDbContext _context;
-        public TrainingScheduleRepository(OCMSDbContext context) : base(context)
+        public InstructorAssignmentRepository(OCMSDbContext context) : base(context)
         {
             _context = context;
         }
         public async Task<bool> ExistsAsync(string id)
         {
-            return await _context.TrainingSchedules.AnyAsync(tp => tp.ScheduleID == id);
+            return await _context.InstructorAssignments.AnyAsync(tp => tp.AssignmentId == id);
         }
     }
 }

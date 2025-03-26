@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace OCMS_Repositories.IRepository
 {
-    public interface ISubjectRepository
+    public interface IInstructorAssignmentRepository
     {
         Task<bool> ExistsAsync(string id);
     }
