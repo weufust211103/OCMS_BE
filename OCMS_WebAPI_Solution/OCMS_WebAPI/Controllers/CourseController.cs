@@ -122,7 +122,6 @@ namespace OCMS_WebAPI.Controllers
                 var updatedByUserId = User.FindFirstValue(ClaimTypes.NameIdentifier);
                 if (string.IsNullOrEmpty(updatedByUserId))
                     return Unauthorized(new { success = false, message = "Unauthorized access." });
-
                 var updatedCourse = await _courseService.UpdateCourseAsync(id, dto, updatedByUserId);
                 if (updatedCourse == null)
                     return NotFound(new { success = false, message = "Course not found." });
