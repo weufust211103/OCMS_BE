@@ -4,10 +4,11 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace OCMS_Services.IService
+namespace OCMS_BOs.RequestModel
 {
-    public interface IPdfSignerService
+    public class ResetPasswordDTO
     {
-        Task<byte[]> SignPdfAsync(string certificateId);
+        public string NewPassword { get; set; }
+
     }
 }

@@ -4,10 +4,10 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace OCMS_Services.IService
+namespace OCMS_BOs.RequestModel
 {
-    public interface IPdfSignerService
+    public class UrlRequestDto
     {
-        Task<byte[]> SignPdfAsync(string certificateId);
+        public string Url { get; set; }
     }
 }
