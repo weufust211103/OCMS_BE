@@ -12,8 +12,10 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 15
     permissions:
-      contents: read #This is required for actions/checkout
+      contents: read
+      security-events: write
 
     steps:
       - uses: actions/checkout@v4
@@ -23,34 +25,55 @@ jobs:
         with:
           dotnet-version: '8.x'
 
-      - name: Build with dotnet
-        run: dotnet build --configuration Release
+      - name: Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: ${{ runner.os }}-nuget-
 
-      - name: dotnet publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp"
+      - name: Restore dependencies
+        run: dotnet restore
 
-      - name: Upload artifact for deployment job
+      - name: Run tests
+        run: dotnet test --no-restore --verbosity normal
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Publish
+        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp" /p:DebugSymbols=false /p:DebugType=None
+
+      - name: Remove unnecessary files
+        run: |
+          Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/*.pdb" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/ref" -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: .net-app
           path: ${{env.DOTNET_ROOT}}/myapp
+          retention-days: 5
 
   deploy:
     runs-on: windows-latest
     needs: build
+    timeout-minutes: 10
     environment:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
     permissions:
-      id-token: write #This is required for requesting the JWT
-      contents: read #This is required for actions/checkout
+      id-token: write
+      contents: read
 
     steps:
-      - name: Download artifact from build job
+      - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: .net-app
-      
+          path: .net-app
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -64,5 +87,42 @@ jobs:
         with:
           app-name: 'ocmstest'
           slot-name: 'Production'
-          package: .
-          
+          package: .net-app
+
+      - name: Health check
+        run: |
+          $maxRetries = 5
+          $retryCount = 0
+          $success = $false
+
+          do {
+            try {
+              $response = Invoke-WebRequest -Uri "https://${{ steps.deploy-to-webapp.outputs.webapp-url }}/swagger/index.html" -UseBasicParsing
+              if ($response.StatusCode -eq 200) {
+                $success = $true
+                Write-Host "✅ Health check passed!"
+                break
+              }
+            } catch {
+              $retryCount++
+              Write-Host "❌ Health check failed. Retrying in 10 seconds... ($retryCount/$maxRetries)"
+              Start-Sleep -Seconds 10
+            }
+          } while ($retryCount -lt $maxRetries -and -not $success)
+
+          if (-not $success) {
+            Write-Host "❌ Health check failed after $maxRetries attempts."
+            exit 1
+          }
+
+      - name: Log deployment status
+        if: always()
+        run: |
+          echo "============== DEPLOYMENT STATUS SUMMARY =============="
+          echo "Status: ${{ job.status }}"
+          echo "Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+          echo "Environment: Production"
+          echo "Application: ocmstest"
+          echo "Deployed URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Commit: ${{ github.sha }}"
