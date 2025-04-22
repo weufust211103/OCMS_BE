@@ -11,51 +11,57 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      security-events: write
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up .NET Core
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.x'
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.nuget/packages
-          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-          restore-keys: ${{ runner.os }}-nuget-
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Run tests
-        run: dotnet test --no-restore --verbosity normal
-
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Publish
-        run: dotnet publish -c Release -o "${{env.DOTNET_ROOT}}/myapp" /p:DebugSymbols=false /p:DebugType=None
-
-      - name: Remove unnecessary files
-        run: |
-          Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/*.pdb" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/ref" -Recurse -Force -ErrorAction SilentlyContinue
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: .net-app
-          path: ${{env.DOTNET_ROOT}}/myapp
-          retention-days: 5
-
+     runs-on: windows-latest
+     timeout-minutes: 15
+     permissions:
+       contents: read # This is required for actions/checkout
+       security-events: write # This is required for security scans
+     steps:
+       - uses: actions/checkout@v4
+ 
+       - name: Set up .NET Core
+         uses: actions/setup-dotnet@v4
+         with:
+           dotnet-version: '8.x'
+ 
+       - name: Cache NuGet packages
+         uses: actions/cache@v3
+         with:
+           path: ~/.nuget/packages
+           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+           restore-keys: ${{ runner.os }}-nuget-
+ 
+       - name: Restore dependencies
+         run: dotnet restore ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln
+ 
+       - name: Run tests
+         run: dotnet test ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln --no-restore --verbosity normal
+ 
+       - name: Security scan with CodeQL
+         uses: github/codeql-action/init@v3
+         with:
+           languages: csharp
+ 
+       - name: Build with dotnet
+         run: dotnet build ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln --configuration Release --no-restore
+ 
+       - name: Perform CodeQL Analysis
+         uses: github/codeql-action/analyze@v3
+ 
+       - name: dotnet publish
+         run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" /p:DebugSymbols=false /p:DebugType=None
+ 
+       - name: Remove unnecessary files
+         run: |
+           Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/*.pdb" -Force -ErrorAction SilentlyContinue
+           Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/ref" -Recurse -Force -ErrorAction SilentlyContinue
+       
+       - name: Upload artifact for deployment job
+         uses: actions/upload-artifact@v4
+         with:
+           name: .net-app
+           path: ${{env.DOTNET_ROOT}}/myapp
+           retention-days: 5
   deploy:
     runs-on: windows-latest
     needs: build
