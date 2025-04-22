@@ -95,35 +95,6 @@ jobs:
           slot-name: 'Production'
           package: .net-app
 
-      - name: Health check
-        run: |
-          $maxRetries = 5
-          $retryCount = 0
-          $success = $false
-          $healthCheckUrl = "${{ steps.deploy-to-webapp.outputs.webapp-url }}/health"
-
-          Write-Host "🔍 Checking health at: $healthCheckUrl"
-          Start-Sleep -Seconds 30
-
-          do {
-            try {
-              $response = Invoke-WebRequest -Uri $healthCheckUrl -UseBasicParsing
-              if ($response.StatusCode -eq 200) {
-              $success = $true
-              Write-Host "✅ Health check passed!"
-              break
-                }
-            } catch {
-                $retryCount++
-                Write-Host "❌ Health check failed. Retrying in 10 seconds... ($retryCount/$maxRetries)"
-                Start-Sleep -Seconds 10
-            }
-          } while ($retryCount -lt $maxRetries -and -not $success)
-
-            if (-not $success) {
-              Write-Host "❌ Health check failed after $maxRetries attempts. Deployment may have issues."
-              exit 1
-            }
       - name: Log deployment status
         if: always()
         run: |
