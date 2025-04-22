@@ -103,7 +103,7 @@ jobs:
 
           do {
             try {
-              $response = Invoke-WebRequest -Uri "https://${{ steps.deploy-to-webapp.outputs.webapp-url }}/swagger/index.html" -UseBasicParsing
+              $response = Invoke-WebRequest -Uri "${{ steps.deploy-to-webapp.outputs.webapp-url }}/swagger/index.html" -UseBasicParsing
               if ($response.StatusCode -eq 200) {
                 $success = $true
                 Write-Host "✅ Health check passed!"
