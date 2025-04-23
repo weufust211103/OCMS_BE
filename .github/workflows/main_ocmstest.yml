@@ -11,60 +11,63 @@ on:
 
 jobs:
   build:
-     runs-on: ubuntu-latest
-     timeout-minutes: 15
-     permissions:
-       contents: read # This is required for actions/checkout
-       security-events: write # This is required for security scans
-     steps:
-       - uses: actions/checkout@v4
- 
-       - name: Set up .NET Core
-         uses: actions/setup-dotnet@v4
-         with:
-           dotnet-version: '8.x'
- 
-       - name: Cache NuGet packages
-         uses: actions/cache@v3
-         with:
-           path: ~/.nuget/packages
-           key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
-           restore-keys: ${{ runner.os }}-nuget-
- 
-       - name: Restore dependencies
-         run: dotnet restore ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln
-       - name: Install Chromium
-         run: |
-            sudo apt-get update
-            sudo apt-get install -y chromium-browser
-       - name: Run tests
-         run: dotnet test ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln --no-restore --verbosity normal
- 
-       - name: Security scan with CodeQL
-         uses: github/codeql-action/init@v3
-         with:
-           languages: csharp
- 
-       - name: Build with dotnet
-         run: dotnet build ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln --configuration Release --no-restore
- 
-       - name: Perform CodeQL Analysis
-         uses: github/codeql-action/analyze@v3
- 
-       - name: dotnet publish
-         run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" /p:DebugSymbols=false /p:DebugType=None
- 
-       - name: Remove unnecessary files
-         run: |
-           Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/*.pdb" -Force -ErrorAction SilentlyContinue
-           Remove-Item -Path "${{env.DOTNET_ROOT}}/myapp/ref" -Recurse -Force -ErrorAction SilentlyContinue
-       
-       - name: Upload artifact for deployment job
-         uses: actions/upload-artifact@v4
-         with:
-           name: .net-app
-           path: ${{env.DOTNET_ROOT}}/myapp
-           retention-days: 5
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read # This is required for actions/checkout
+      security-events: write # This is required for security scans
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET Core
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln
+
+      - name: Install Chromium
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y chromium-browser
+
+      - name: Run tests
+        run: dotnet test ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln --no-restore --verbosity normal
+
+      - name: Security scan with CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+
+      - name: Build with dotnet
+        run: dotnet build ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln --configuration Release --no-restore
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      - name: dotnet publish
+        run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" /p:DebugSymbols=false /p:DebugType=None
+
+      - name: Remove unnecessary files
+        run: |
+          rm -f "${{env.DOTNET_ROOT}}/myapp/*.pdb"
+          rm -rf "${{env.DOTNET_ROOT}}/myapp/ref"
+
+      - name: Upload artifact for deployment job
+        uses: actions/upload-artifact@v4
+        with:
+          name: .net-app
+          path: ${{env.DOTNET_ROOT}}/myapp
+          retention-days: 5
+
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -75,7 +78,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-
     steps:
       - name: Download artifact
         uses: actions/download-artifact@v4
@@ -86,9 +88,9 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-             client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_93B5BF5DAB03467688690D3ACCEDBE88 }}
-             tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_59616B93C7B54D13B71E415AA2C56A3B }}
-             subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_8472ACCCD6474EF6A2E515EA73A76B05 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_93B5BF5DAB03467688690D3ACCEDBE88 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_59616B93C7B54D13B71E415AA2C56A3B }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_8472ACCCD6474EF6A2E515EA73A76B05 }}
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
@@ -103,7 +105,7 @@ jobs:
         run: |
           echo "============== DEPLOYMENT STATUS SUMMARY =============="
           echo "Status: ${{ job.status }}"
-          echo "Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+          echo "Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S')"
           echo "Environment: Production"
           echo "Application: ocmstest"
           echo "Deployed URL: ${{ steps.deploy-to-webapp.outputs.webapp-url }}"
