@@ -1,19 +1,20 @@
 ﻿using OCMS_BOs.Entities;
 using OCMS_Repositories;
 using OCMS_Services.IService;
-using System;
-using System.Collections.Generic;
-using System.Drawing.Printing;
-using System.Linq;
 using System.Net.Http.Headers;
 using System.Net.Mail;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using QuestPDF.Fluent;
-using QuestPDF.Infrastructure;
 using QuestPDF.Helpers;
-
+using HtmlAgilityPack;
+using QuestPDF.Infrastructure;
+using System.Text.RegularExpressions;
+using Syncfusion.HtmlConverter;
+using Syncfusion.Pdf;
+using Syncfusion.Pdf.Graphics;
+using System.IO;
+using System.Drawing;
 namespace OCMS_Services.Service
 {
     public class PdfSignerService : IPdfSignerService
@@ -79,51 +80,81 @@ namespace OCMS_Services.Service
         }
         private async Task<byte[]> ConvertHtmlToPdf(string htmlContent)
         {
-            Console.WriteLine("➡️ Bắt đầu quá trình chuyển HTML thành PDF");
+            // Wrap HTML với kích thước cố định và điều chỉnh
+            htmlContent = $$"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-size: 10pt;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .pdf-container {
+            width: 1123px; /* A4 landscape */
+            height: 794px;
+            padding: 40px;
+            box-sizing: border-box;
+            position: relative;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="pdf-container">
+        {{htmlContent}}
+    </div>
+</body>
+</html>
+""";
 
-            try
-            {
-                // Configure QuestPDF settings (optional, for font licensing if needed)
-                QuestPDF.Settings.License = LicenseType.Community;
+            // Tạo các cài đặt cho HTML converter
+            HtmlToPdfConverter htmlConverter = new HtmlToPdfConverter();
+            BlinkConverterSettings settings = new BlinkConverterSettings();
 
-                // Create a PDF document
-                var document = Document.Create(container =>
-                {
-                    container.Page(page =>
-                    {
-                        // Set A4 page size and margins
-                        page.Size(PageSizes.A4);
-                        page.Margin(10, Unit.Millimetre); // Matches original 10mm margins
-                        page.PageColor(Colors.White);
-                        page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(10));
+            // Cấu hình các tùy chọn
+            settings.ViewPortSize = new Syncfusion.Drawing.Size(1240, 1754);
+            settings.EnableJavaScript = true;
+            
 
-                        // Content container with padding (mimicking .pdf-container)
-                        page.Content().Padding(40).Column(column =>
-                        {
-                            // Add HTML content as text (simplified)
-                            // For complex HTML, parse with AngleSharp (see notes below)
-                            column.Item().Text(htmlContent);
-                        });
-                    });
-                });
+            // Thiết lập PDF options
+            PdfDocument document = new PdfDocument();
+            PdfPageSettings pageSettings = new PdfPageSettings();
+            pageSettings.Size = PdfPageSize.A4;
+            pageSettings.Margins.All = 5; // 5mm
+            document.PageSettings = pageSettings;
 
-                Console.WriteLine("✅ Đã cấu hình tài liệu PDF với định dạng A4 và nội dung");
+            // Điều chỉnh tỷ lệ hiển thị (scale)
+            settings.Scale = 0.9f;
 
-                // Generate PDF bytes
-                byte[] pdfBytes = document.GeneratePdf();
-                Console.WriteLine($"✅ PDF tạo thành công ({pdfBytes.Length} bytes)");
+            // Áp dụng cài đặt
+            htmlConverter.ConverterSettings = settings;
 
-                return pdfBytes;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("❌ Lỗi khi chuyển HTML sang PDF:");
-                Console.WriteLine(ex.Message);
-                if (ex.InnerException != null)
-                    Console.WriteLine($"➡ Inner: {ex.InnerException.Message}");
+            // Chuyển đổi HTML thành PDF
+            PdfDocument pdfDocument = await Task.Run(() => htmlConverter.Convert(htmlContent, string.Empty));
 
-                throw;
-            }
+            // Lưu PDF vào memory stream
+            MemoryStream stream = new MemoryStream();
+            pdfDocument.Save(stream);
+
+            // Reset position của stream về 0
+            stream.Position = 0;
+
+            // Đóng document để giải phóng tài nguyên
+            pdfDocument.Close(true);
+
+            // Trả về byte array
+            return stream.ToArray();
         }
         #endregion
 

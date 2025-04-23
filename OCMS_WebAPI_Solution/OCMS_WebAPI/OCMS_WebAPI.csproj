@@ -23,5 +23,12 @@
   <ItemGroup>
     <ProjectReference Include="..\OCMS_Services\OCMS_Services.csproj" />
   </ItemGroup>
-
+	<ItemGroup>
+		<PackageReference Include="Syncfusion.HtmlToPdfConverter.Net.Windows" Version="29.1.39" />
+	</ItemGroup>
+<ItemGroup>
+  <Content Include="BlinkBinariesWindows\**">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+</ItemGroup>
 </Project>
