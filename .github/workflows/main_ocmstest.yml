@@ -49,7 +49,7 @@ jobs:
         uses: github/codeql-action/analyze@v3
 
       - name: dotnet publish
-        run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" --self-contained --runtime win-x64 /p:DebugSymbols=false /p:DebugType=None
+        run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" --self-contained --runtime win-x86 /p:DebugSymbols=false /p:DebugType=None
 
       - name: Debug artifact contents before removal
         run: ls -R "${{env.DOTNET_ROOT}}/myapp"
@@ -58,6 +58,7 @@ jobs:
         run: |
           rm -f "${{env.DOTNET_ROOT}}/myapp/*.pdb"
           rm -rf "${{env.DOTNET_ROOT}}/myapp/ref"
+          rm -rf "${{env.DOTNET_ROOT}}/myapp/runtimes/*/{osx,linux,win-x64}*"
 
       - name: Debug artifact contents after removal
         run: ls -R "${{env.DOTNET_ROOT}}/myapp"
@@ -112,6 +113,11 @@ jobs:
               },
               {
                 "name": "ASPNETCORE_LOGGING__CONSOLE__DISABLECOLORS",
+                "value": "true",
+                "slotSetting": false
+              },
+              {
+                "name": "WEBSITE_32BIT_ENABLED",
                 "value": "true",
                 "slotSetting": false
               }
