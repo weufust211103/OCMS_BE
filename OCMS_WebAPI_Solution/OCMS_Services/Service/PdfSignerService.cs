@@ -2,6 +2,7 @@
 using OCMS_Repositories;
 using OCMS_Services.IService;
 using PuppeteerSharp;
+using PuppeteerSharp.Media;
 using System;
 using System.Collections.Generic;
 using System.Drawing.Printing;
@@ -77,15 +78,16 @@ namespace OCMS_Services.Service
         }
         private async Task<byte[]> ConvertHtmlToPdf(string htmlContent)
         {
-            Console.WriteLine("Starting HTML to PDF conversion process");
+            Console.WriteLine("➡️ Bắt đầu quá trình chuyển HTML thành PDF");
 
             try
             {
-                // Wrap HTML with fixed size and adjustments
+                // Bọc HTML bằng khung chuẩn A4
                 htmlContent = $$"""
         <!DOCTYPE html>
         <html>
         <head>
+            <meta charset="UTF-8">
             <style>
                 @page {
                     size: A4;
@@ -94,16 +96,16 @@ namespace OCMS_Services.Service
                 body {
                     margin: 0;
                     padding: 0;
+                    font-family: Arial, sans-serif;
                     font-size: 10pt;
                     width: 100%;
                     box-sizing: border-box;
                 }
                 .pdf-container {
-                    width: 1123px; /* A4 landscape */
+                    width: 1123px;
                     height: 794px;
                     padding: 40px;
                     box-sizing: border-box;
-                    position: relative;
                 }
                 img {
                     max-width: 100%;
@@ -119,122 +121,85 @@ namespace OCMS_Services.Service
         </html>
         """;
 
-                Console.WriteLine("HTML content prepared with proper styling");
+                Console.WriteLine("✅ HTML đã được bao bọc với định dạng A4");
 
-                // Khởi tạo Puppeteer
-                var browserFetcher = new BrowserFetcher();
-                Console.WriteLine("Browser fetcher initialized");
-
-                string buildId = "1095492";
-
-                // Check if an environment executable path is specified
+                // Kiểm tra xem có biến môi trường chromium không (trên Azure Linux container thì nên có)
                 string executablePath = Environment.GetEnvironmentVariable("PUPPETEER_EXECUTABLE_PATH");
-                Console.WriteLine($"Environment Chrome path: {executablePath ?? "Not specified, will use downloaded version"}");
+                bool useSystemChrome = !string.IsNullOrEmpty(executablePath);
 
-                bool hasCustomChrome = !string.IsNullOrEmpty(executablePath);
-
-                // If not using custom Chrome path, use fetched browser path
-                if (!hasCustomChrome)
+                if (!useSystemChrome)
                 {
-                    Console.WriteLine($"Downloading Chromium build {buildId}...");
+                    Console.WriteLine("🔍 Không tìm thấy Chromium từ biến môi trường. Tải về trình duyệt mặc định...");
+                    var browserFetcher = new BrowserFetcher();
+                    string buildId = "1095492"; // hoặc bạn có thể để null để Puppeteer chọn bản mới nhất
                     await browserFetcher.DownloadAsync(buildId);
                     executablePath = browserFetcher.GetExecutablePath(buildId);
-                    Console.WriteLine($"Using downloaded Chromium at: {executablePath}");
                 }
 
-                // Azure Windows-specific launch options
+                Console.WriteLine($"🚀 Đường dẫn Chromium sử dụng: {executablePath}");
+
                 var launchOptions = new LaunchOptions
                 {
                     Headless = true,
                     ExecutablePath = executablePath,
-                    Args = new[] {
-                        "--no-sandbox",
-                        "--disable-setuid-sandbox",
-                        "--disable-dev-shm-usage",
-                        "--disable-gpu",
-                        "--disable-extensions",
-                        "--disable-web-security",
-                        "--no-first-run",
-                        "--mute-audio",
-                        "--disable-infobars"
-                    },
-                    Timeout = 120000 // Increase timeout to 2 minutes
+                    Args = new[]
+                    {
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-extensions",
+                "--disable-web-security",
+                "--no-first-run",
+                "--mute-audio",
+                "--disable-infobars"
+            },
+                    Timeout = 60000 // 60 giây
                 };
 
-                Console.WriteLine("Launching browser with options: " +
-                                 $"Headless={launchOptions.Headless}, " +
-                                 $"ExecutablePath={launchOptions.ExecutablePath}, " +
-                                 $"Timeout={launchOptions.Timeout}ms");
-
                 using var browser = await Puppeteer.LaunchAsync(launchOptions);
-                Console.WriteLine("Browser launched successfully");
+                Console.WriteLine("🧠 Trình duyệt được khởi động");
 
                 using var page = await browser.NewPageAsync();
-                Console.WriteLine("New page created");
+                Console.WriteLine("📄 Trang mới được tạo");
 
-                // Set viewport to ensure proper rendering
                 await page.SetViewportAsync(new ViewPortOptions
                 {
-                    Width = 1240,  // ~A4 width in pixels at 150dpi
-                    Height = 1754, // ~A4 height in pixels at 150dpi
-                    DeviceScaleFactor = 1.5
+                    Width = 1240,
+                    Height = 1754,
+                    DeviceScaleFactor = 2 // DPI cao hơn
                 });
-                Console.WriteLine("Viewport set: 1240x1754 with scale factor 1.5");
 
-                // Đặt nội dung HTML
-                try
-                {
-                    await page.SetContentAsync(htmlContent);
-                    Console.WriteLine("HTML content set to page successfully");
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error setting page content: {ex.Message}");
-                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
-                    throw;
-                }
+                await page.SetContentAsync(htmlContent);
+                Console.WriteLine("🔤 Nội dung HTML đã được nạp vào trang");
 
-                // Optimize PDF settings
                 var pdfOptions = new PdfOptions
                 {
                     Format = PuppeteerSharp.Media.PaperFormat.A4,
                     PrintBackground = true,
-                    MarginOptions = new PuppeteerSharp.Media.MarginOptions
+                    MarginOptions = new MarginOptions
                     {
-                        Top = "5mm",
-                        Bottom = "5mm",
-                        Left = "5mm",
-                        Right = "5mm"
+                        Top = "10mm",
+                        Bottom = "10mm",
+                        Left = "10mm",
+                        Right = "10mm"
                     },
-                    Scale = 0.9m // Slightly reduced scale to ensure content fits
+                    Scale = 1.0m
                 };
-                Console.WriteLine("PDF options configured: A4 format with 5mm margins and 0.9 scale");
 
-                try
-                {
-                    Console.WriteLine("Generating PDF...");
-                    byte[] pdfBytes = await page.PdfDataAsync(pdfOptions);
-                    Console.WriteLine($"PDF generated successfully: {pdfBytes.Length} bytes");
-                    return pdfBytes;
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error generating PDF: {ex.Message}");
-                    Console.WriteLine($"Stack trace: {ex.StackTrace}");
-                    throw;
-                }
+                Console.WriteLine("🖨️ Tạo PDF với các tùy chọn A4 + background + margin");
+
+                var pdfBytes = await page.PdfDataAsync(pdfOptions);
+                Console.WriteLine($"✅ PDF tạo thành công ({pdfBytes.Length} bytes)");
+
+                return pdfBytes;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"HTML to PDF conversion failed: {ex.Message}");
-                Console.WriteLine($"Exception type: {ex.GetType().Name}");
-                Console.WriteLine($"Stack trace: {ex.StackTrace}");
-
+                Console.WriteLine("❌ Lỗi khi chuyển HTML sang PDF:");
+                Console.WriteLine(ex.Message);
                 if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"Inner exception: {ex.InnerException.Message}");
-                    Console.WriteLine($"Inner exception type: {ex.InnerException.GetType().Name}");
-                }
+                    Console.WriteLine($"➡ Inner: {ex.InnerException.Message}");
 
                 throw;
             }
