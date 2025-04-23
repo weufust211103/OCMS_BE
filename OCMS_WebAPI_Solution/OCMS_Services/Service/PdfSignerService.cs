@@ -11,6 +11,8 @@ using HtmlAgilityPack;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using QuestPDF.Drawing;
+using QuestPDF.Elements;
 using System.Text.RegularExpressions;
 using Syncfusion.HtmlConverter;
 using Syncfusion.Pdf;
@@ -21,6 +23,9 @@ using System;
 using Microsoft.Extensions.Configuration;
 using AngleSharp;
 using AngleSharp.Html.Parser;
+using SkiaSharp;
+using SkiaSharp.Extended.Svg;
+
 namespace OCMS_Services.Service
 {
     public class PdfSignerService : IPdfSignerService
@@ -84,158 +89,182 @@ namespace OCMS_Services.Service
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync();
         }
+        public byte[] ConvertSvgToPng(string base64Svg, int width = 150, int height = 150)
+        {
+            try
+            {
+                // Decode the base64 string to get the raw SVG bytes
+                var svgBytes = Convert.FromBase64String(base64Svg);
 
+                var svg = new SkiaSharp.Extended.Svg.SKSvg();
+                using var svgStream = new MemoryStream(svgBytes);
+                svg.Load(svgStream);
+
+                // Create a new bitmap surface to render the PNG
+                using var bitmap = new SKBitmap(width, height);
+                using var canvas = new SKCanvas(bitmap);
+                canvas.Clear(SKColors.White);
+
+                // Calculate scale factor to fit
+                var scaleX = width / svg.CanvasSize.Width;
+                var scaleY = height / svg.CanvasSize.Height;
+                var scale = Math.Min(scaleX, scaleY);
+
+                // Apply transform and draw
+                canvas.Scale(scale);
+                canvas.DrawPicture(svg.Picture);
+                canvas.Flush();
+
+                // Encode to PNG
+                using var image = SKImage.FromBitmap(bitmap);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                return data.ToArray();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SVG to PNG conversion failed: {ex.Message}");
+                return Array.Empty<byte>();
+            }
+        }
         private async Task<byte[]> ConvertHtmlToPdf(string htmlContent)
         {
             try
             {
-                // Log the HTML content for debugging Console.WriteLine("HTML Content to Convert:");
-                Console.WriteLine(htmlContent);
-                // Test with minimal content if the original HTML is invalid
-                string contentToConvert = htmlContent;
-                if (string.IsNullOrWhiteSpace(htmlContent) || !htmlContent.Contains("<"))
-                {
-                    Console.WriteLine("⚠️ HTML content is empty or invalid, using test content.");
-                    contentToConvert = "<p>Test PDF Content</p>";
-                }
-
-                // Parse the HTML content using AngleSharp
+                // Load HTML with AngleSharp
                 var config = Configuration.Default;
                 var context = BrowsingContext.New(config);
                 var parser = context.GetService<IHtmlParser>();
-                var document = await parser.ParseDocumentAsync(contentToConvert);
+                var document = await parser.ParseDocumentAsync(htmlContent);
 
-                // Create a MemoryStream to store the PDF
                 using var stream = new MemoryStream();
-
-                // Configure QuestPDF settings
                 QuestPDF.Settings.License = LicenseType.Community;
 
-                // Create the PDF document
                 Document.Create(container =>
                 {
                     container.Page(page =>
                     {
-                        page.Size(PageSizes.A4); // A4 size
-                        page.Margin(5, Unit.Millimetre); // 5mm margins
-                        page.DefaultTextStyle(x => x.FontSize(12).FontFamily("Roboto")); // Default font and size
+                        page.Size(PageSizes.A4);
+                        page.Margin(20);
+                        page.DefaultTextStyle(x => x.FontSize(12).FontFamily("Arial"));
 
-                        page.Content().Padding(20).Element(content =>
+                        page.Content().Element(body =>
                         {
-                            // Main certificate container (equivalent to .certificate: 900x650px)
-                            content.Width(900).MinHeight(650).Border(2).BorderColor(Colors.Black).Column(column =>
+                            body.Column(column =>
                             {
-                                // Header (equivalent to .header)
+                                // Header
                                 column.Item().Row(row =>
                                 {
-                                    row.RelativeItem().Text(document.QuerySelector(".header-left")?.TextContent?.Trim() ?? "")
-                                        .FontSize(12).LineHeight(1.5f);
-                                    row.RelativeItem().AlignRight().Text(document.QuerySelector(".header-right")?.TextContent?.Trim() ?? "")
-                                        .FontSize(12).LineHeight(1.5f);
+                                    row.RelativeItem().Text(document.QuerySelector(".header-left")?.TextContent?.Trim() ?? "").LineHeight(1.5f);
+                                    row.RelativeItem().AlignRight().Text(document.QuerySelector(".header-right")?.TextContent?.Trim() ?? "").LineHeight(1.5f);
                                 });
 
-                                column.Item().Height(20); // Margin-bottom: 20px
+                                column.Item().Height(20);
 
-                                // Title (equivalent to .title)
+                                // Title
                                 column.Item().AlignCenter().Text(document.QuerySelector(".title")?.TextContent?.Trim() ?? "")
-                                    .FontSize(24).Bold();
+                                    .FontSize(24).Bold().FontColor(Colors.Red.Darken2);
 
-                                column.Item().Height(20); // Margin-bottom: 20px
+                                column.Item().Height(20);
 
-                                // Content (equivalent to .content)
+                                // Content
                                 column.Item().Row(row =>
                                 {
-                                    // Photo (equivalent to .photo)
                                     var imgElement = document.QuerySelector(".photo img");
                                     if (imgElement != null)
                                     {
                                         var src = imgElement.GetAttribute("src");
                                         if (!string.IsNullOrEmpty(src) && src.StartsWith("data:image"))
                                         {
-                                            var base64String = src.Split(',')[1];
-                                            var imageBytes = Convert.FromBase64String(base64String);
-                                            row.ConstantItem(150).Element(photo =>
+                                            var base64 = src.Split(',')[1];
+                                            byte[] imageBytes = null;
+
+                                            if (src.Contains("svg+xml"))
                                             {
-                                                photo.Image(imageBytes).FitArea();
-                                                photo.Border(1).BorderColor(Colors.Black);
-                                            });
+                                                // SVG: Convert to PNG
+                                                imageBytes = ConvertSvgToPng(base64); // Make sure this method is defined
+                                            }
+                                            else
+                                            {
+                                                // PNG/JPEG etc.
+                                                imageBytes = Convert.FromBase64String(base64);
+                                            }
+
+                                            if (imageBytes != null && imageBytes.Length > 0)
+                                            {
+                                                row.ConstantItem(150).Height(205).Element(imageContainer =>
+                                                {
+                                                    imageContainer.Border(1)
+                                                                  .Padding(2)
+                                                                  .Image(imageBytes)
+                                                                  .FitArea();
+                                                });
+                                            }
                                         }
                                     }
+                                ;
 
-                                    row.ConstantItem(20); // Margin-right: 20px
+                                row.ConstantItem(20);
 
-                                    // Details (equivalent to .details)
                                     row.RelativeItem().Column(details =>
                                     {
-                                        foreach (var line in document.QuerySelector(".details")?.ChildNodes.Where(n => n.NodeType == AngleSharp.Dom.NodeType.Text ) ?? Enumerable.Empty<AngleSharp.Dom.INode>())
+                                        var detailsElement = document.QuerySelector(".details");
+                                        foreach (var line in detailsElement?.ChildNodes ?? Enumerable.Empty<AngleSharp.Dom.INode>())
                                         {
-                                            if (line.NodeType == AngleSharp.Dom.NodeType.Text)
-                                            {
-                                                var text = line.TextContent.Trim();
-                                                if (!string.IsNullOrEmpty(text))
-                                                {
-                                                    details.Item().Text(text).FontSize(16).LineHeight(1.6f);
-                                                }
-                                            }
+                                            if (!string.IsNullOrWhiteSpace(line.TextContent))
+                                                details.Item().Text(line.TextContent.Trim()).LineHeight(1.5f);
                                         }
                                     });
                                 });
 
-                                column.Item().Height(20); // Margin-bottom: 20px
+                                column.Item().Height(20);
 
-                                // Signature section (equivalent to .signature-section)
+                                // Signature Section
                                 column.Item().AlignRight().Width(300).Column(signature =>
                                 {
-                                    signature.Item().AlignCenter()
-                                        .Text(document.QuerySelector(".signature-area")?.TextContent?.Trim() ?? "")
-                                        .FontSize(12)
-                                        .LineHeight(1.5f);
+                                    var signatureHtml = document.QuerySelector(".signature-area")?.InnerHtml;
+                                    var lines = signatureHtml?.Split("<br>") ?? Array.Empty<string>();
+                                    foreach (var line in lines)
+                                    {
+                                        signature.Item().AlignCenter().Text(line.Trim()).FontSize(12).LineHeight(1.5f);
+                                    }
 
-                                    signature.Item().Height(10); // Margin-bottom: 10px
+                                    signature.Item().Height(10);
 
-                                    signature.Item().AlignCenter()
-                                        .Width(250).Height(60)
+                                    signature.Item().AlignCenter().Width(250).Height(60)
                                         .Border(1)
                                         .BorderColor(Colors.Grey.Lighten2)
-                                        .Background(Colors.White) // Optional: ensures content stands out
                                         .AlignMiddle().AlignCenter()
                                         .Text("Vùng dành cho chữ ký số")
                                         .FontSize(10)
                                         .FontColor(Colors.Grey.Medium);
                                 });
 
-                                // Footer (equivalent to .footer)
-                                column.Item().PaddingTop(20).Row(footer =>
+                                // Footer
+                                column.Item().Height(20);
+                                column.Item().Row(footer =>
                                 {
-                                    footer.RelativeItem().Text(document.QuerySelector(".footer div:first-child")?.TextContent?.Trim() ?? "")
-                                        .FontSize(12);
-                                    footer.RelativeItem().AlignRight().Text(document.QuerySelector(".footer div:last-child")?.TextContent?.Trim() ?? "")
-                                        .FontSize(12);
+                                    footer.RelativeItem().Text(document.QuerySelector(".footer div:first-child")?.TextContent?.Trim() ?? "");
+                                    footer.RelativeItem().AlignRight().Text(document.QuerySelector(".footer div:last-child")?.TextContent?.Trim() ?? "");
                                 });
                             });
                         });
                     });
                 }).GeneratePdf(stream);
 
-                // Reset stream position and return byte array
-                stream.Position = 0;
-                byte[] pdfBytes = stream.ToArray();
-                Console.WriteLine($"✅ PDF tạo thành công ({pdfBytes.Length} bytes)");
-                return pdfBytes;
+                return stream.ToArray();
             }
             catch (Exception ex)
             {
-                // Log the overall error
-                Console.WriteLine($"PDF generation error: {ex.Message}");
+                Console.WriteLine($"❌ Error generating PDF: {ex.Message}");
                 if (ex.InnerException != null)
-                    Console.WriteLine($"Inner error: {ex.InnerException.Message}");
+                    Console.WriteLine($"Inner: {ex.InnerException.Message}");
                 throw;
             }
         }
-    #endregion
+        #endregion
 
-    #region Sign Pdf
-    public async Task<byte[]> SignPdfAsync(string certificateId, string approvedByUserId)
+        #region Sign Pdf
+        public async Task<byte[]> SignPdfAsync(string certificateId, string approvedByUserId)
         {
             // Step 1: Validate input and dependencies
             if (string.IsNullOrWhiteSpace(certificateId))
