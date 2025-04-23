@@ -157,9 +157,12 @@ namespace OCMS_Services.Service
                     Timeout = 60000 // 60 giây
                 };
 
-                using var browser = await Puppeteer.LaunchAsync(launchOptions);
-                Console.WriteLine("🧠 Trình duyệt được khởi động");
-
+                var browser = await Puppeteer.LaunchAsync(new LaunchOptions
+                {
+                    Headless = true,
+                    ExecutablePath = "/usr/bin/chromium-browser", // Hoặc dùng đúng path từ Puppeteer dependency nếu khác
+                    Args = new[] { "--no-sandbox", "--disable-setuid-sandbox" }
+                });
                 using var page = await browser.NewPageAsync();
                 Console.WriteLine("📄 Trang mới được tạo");
 
