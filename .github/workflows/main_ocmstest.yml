@@ -48,16 +48,7 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
 
-      # 💡 Install Playwright CLI
-      - name: Install Playwright CLI
-        run: dotnet tool install --global Microsoft.Playwright.CLI
-
-      # 💡 Install Playwright browsers
-      - name: Install Playwright Browsers
-        run: playwright install -p ./OCMS_WebAPI_Solution/OCMS_WebAPI/OCMS_WebAPI.csproj
-        env:
-          PATH: ${{ env.PATH }}:/home/runner/.dotnet/tools
-
+      
       - name: dotnet publish
         run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" --self-contained --runtime win-x86 /p:DebugSymbols=false /p:DebugType=None
 
