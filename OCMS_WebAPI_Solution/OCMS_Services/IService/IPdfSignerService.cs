@@ -11,5 +11,7 @@ namespace OCMS_Services.IService
         Task<byte[]> SignPdfAsync(string certificateId, string signedByUserId);
         Task SendCertificateByEmailAsync(string certificateId);
         Task<byte[]> SignDecisionAsync(string decisionId);
+
+        Task<byte[]> ConvertHtmlToPdfPuppet(string htmlContent);
     }
 }

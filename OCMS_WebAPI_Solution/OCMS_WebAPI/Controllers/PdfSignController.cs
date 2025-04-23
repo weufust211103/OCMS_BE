@@ -18,7 +18,42 @@ namespace OCMS_WebAPI.Controllers
         {
             _pdfSignerService = pdfSignerService;
         }
-        
+        [HttpPost("convert")]
+        public async Task<IActionResult> ConvertToPdf(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest("No file uploaded.");
+            }
+
+            if (!file.FileName.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest("Only HTML files are supported.");
+            }
+
+            try
+            {
+                // Read HTML content from the file
+                using var stream = file.OpenReadStream();
+                using var reader = new StreamReader(stream);
+                var htmlContent = await reader.ReadToEndAsync();
+
+                if (string.IsNullOrWhiteSpace(htmlContent))
+                {
+                    return BadRequest("HTML file is empty.");
+                }
+
+                // Convert to PDF
+                byte[] pdfBytes = await _pdfSignerService.ConvertHtmlToPdfPuppet(htmlContent);
+
+                // Return PDF as a downloadable file
+                return File(pdfBytes, "application/pdf", "converted.pdf");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Error generating PDF: {ex.Message}");
+            }
+        }
         [HttpPost("{certificateId}")]
         [CustomAuthorize("HeadMaster")]
         public async Task<IActionResult> SignPdfFromCertificateId(string certificateId)

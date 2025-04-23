@@ -25,6 +25,9 @@ using AngleSharp;
 using AngleSharp.Html.Parser;
 using SkiaSharp;
 using SkiaSharp.Extended.Svg;
+using Microsoft.AspNetCore.Components;
+using System.Runtime.InteropServices;
+using PuppeteerSharp;
 
 namespace OCMS_Services.Service
 {
@@ -124,6 +127,109 @@ namespace OCMS_Services.Service
             {
                 Console.WriteLine($"SVG to PNG conversion failed: {ex.Message}");
                 return Array.Empty<byte>();
+            }
+        }
+        public async Task<byte[]> ConvertHtmlToPdfPuppet(string htmlContent)
+        {
+            try
+            {
+                // Wrap HTML with fixed size and adjustments
+                htmlContent = $$"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            font-size: 10pt;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .pdf-container {
+            width: 1123px; /* A4 landscape */
+            height: 794px;
+            padding: 40px;
+            box-sizing: border-box;
+            position: relative;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="pdf-container">
+        {{htmlContent}}
+    </div>
+</body>
+</html>
+""";
+
+                // Define executable path
+                string executablePath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                    ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" // Adjust if your Chrome is elsewhere
+                    : Environment.GetEnvironmentVariable("PUPPETEER_EXECUTABLE_PATH") ?? "/usr/bin/chromium";
+
+                var launchOptions = new LaunchOptions
+                {
+                    Headless = true,
+                    ExecutablePath = executablePath,
+                    Args = new[]
+                    {
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--font-render-hinting=none",
+                "--disable-web-security"
+            }
+                };
+
+                using var browser = await Puppeteer.LaunchAsync(launchOptions);
+                using var page = await browser.NewPageAsync();
+
+                await page.SetViewportAsync(new ViewPortOptions
+                {
+                    Width = 1240,
+                    Height = 1754,
+                    DeviceScaleFactor = 1.5
+                });
+
+                await page.SetContentAsync(htmlContent, new PuppeteerSharp.NavigationOptions
+                {
+                    WaitUntil = new[] { WaitUntilNavigation.Networkidle0 },
+                    Timeout = 60000
+                });
+
+                var pdfOptions = new PdfOptions
+                {
+                    Format = PuppeteerSharp.Media.PaperFormat.A4,
+                    PrintBackground = true,
+                    MarginOptions = new PuppeteerSharp.Media.MarginOptions
+                    {
+                        Top = "5mm",
+                        Bottom = "5mm",
+                        Left = "5mm",
+                        Right = "5mm"
+                    },
+                    Scale = 0.9m
+                };
+
+                byte[] pdfBytes = await page.PdfDataAsync(pdfOptions);
+                return pdfBytes;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"❌ Error generating PDF: {ex.Message}");
+                if (ex.InnerException != null)
+                    Console.WriteLine($"Inner: {ex.InnerException.Message}");
+                throw;
             }
         }
         private async Task<byte[]> ConvertHtmlToPdf(string htmlContent)
