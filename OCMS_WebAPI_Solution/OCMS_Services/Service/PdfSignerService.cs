@@ -1,8 +1,6 @@
 ﻿using OCMS_BOs.Entities;
 using OCMS_Repositories;
 using OCMS_Services.IService;
-using PuppeteerSharp;
-using PuppeteerSharp.Media;
 using System;
 using System.Collections.Generic;
 using System.Drawing.Printing;
@@ -12,6 +10,9 @@ using System.Net.Mail;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using QuestPDF.Fluent;
+using QuestPDF.Infrastructure;
+using QuestPDF.Helpers;
 
 namespace OCMS_Services.Service
 {
@@ -82,117 +83,34 @@ namespace OCMS_Services.Service
 
             try
             {
-                // Bọc HTML bằng khung chuẩn A4
-                htmlContent = $$"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                @page {
-                    size: A4;
-                    margin: 0;
-                }
-                body {
-                    margin: 0;
-                    padding: 0;
-                    font-family: Arial, sans-serif;
-                    font-size: 10pt;
-                    width: 100%;
-                    box-sizing: border-box;
-                }
-                .pdf-container {
-                    width: 1123px;
-                    height: 794px;
-                    padding: 40px;
-                    box-sizing: border-box;
-                }
-                img {
-                    max-width: 100%;
-                    height: auto;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="pdf-container">
-                {{htmlContent}}
-            </div>
-        </body>
-        </html>
-        """;
+                // Configure QuestPDF settings (optional, for font licensing if needed)
+                QuestPDF.Settings.License = LicenseType.Community;
 
-                Console.WriteLine("✅ HTML đã được bao bọc với định dạng A4");
-
-                // Kiểm tra xem có biến môi trường chromium không (trên Azure Linux container thì nên có)
-                string executablePath = Environment.GetEnvironmentVariable("PUPPETEER_EXECUTABLE_PATH");
-                bool useSystemChrome = !string.IsNullOrEmpty(executablePath);
-
-                if (!useSystemChrome)
+                // Create a PDF document
+                var document = Document.Create(container =>
                 {
-                    Console.WriteLine("🔍 Không tìm thấy Chromium từ biến môi trường. Tải về trình duyệt mặc định...");
-                    var browserFetcher = new BrowserFetcher();
-                    string buildId = "1095492"; // hoặc bạn có thể để null để Puppeteer chọn bản mới nhất
-                    await browserFetcher.DownloadAsync(buildId);
-                    executablePath = browserFetcher.GetExecutablePath(buildId);
-                }
-
-                Console.WriteLine($"🚀 Đường dẫn Chromium sử dụng: {executablePath}");
-
-                var launchOptions = new LaunchOptions
-                {
-                    Headless = true,
-                    ExecutablePath = executablePath,
-                    Args = new[]
+                    container.Page(page =>
                     {
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-extensions",
-                "--disable-web-security",
-                "--no-first-run",
-                "--mute-audio",
-                "--disable-infobars"
-            },
-                    Timeout = 60000 // 60 giây
-                };
+                        // Set A4 page size and margins
+                        page.Size(PageSizes.A4);
+                        page.Margin(10, Unit.Millimetre); // Matches original 10mm margins
+                        page.PageColor(Colors.White);
+                        page.DefaultTextStyle(x => x.FontFamily("Arial").FontSize(10));
 
-                var browser = await Puppeteer.LaunchAsync(new LaunchOptions
-                {
-                    Headless = true,
-                    ExecutablePath = "/usr/bin/chromium-browser", // Hoặc dùng đúng path từ Puppeteer dependency nếu khác
-                    Args = new[] { "--no-sandbox", "--disable-setuid-sandbox" }
-                });
-                using var page = await browser.NewPageAsync();
-                Console.WriteLine("📄 Trang mới được tạo");
-
-                await page.SetViewportAsync(new ViewPortOptions
-                {
-                    Width = 1240,
-                    Height = 1754,
-                    DeviceScaleFactor = 2 // DPI cao hơn
+                        // Content container with padding (mimicking .pdf-container)
+                        page.Content().Padding(40).Column(column =>
+                        {
+                            // Add HTML content as text (simplified)
+                            // For complex HTML, parse with AngleSharp (see notes below)
+                            column.Item().Text(htmlContent);
+                        });
+                    });
                 });
 
-                await page.SetContentAsync(htmlContent);
-                Console.WriteLine("🔤 Nội dung HTML đã được nạp vào trang");
+                Console.WriteLine("✅ Đã cấu hình tài liệu PDF với định dạng A4 và nội dung");
 
-                var pdfOptions = new PdfOptions
-                {
-                    Format = PuppeteerSharp.Media.PaperFormat.A4,
-                    PrintBackground = true,
-                    MarginOptions = new MarginOptions
-                    {
-                        Top = "10mm",
-                        Bottom = "10mm",
-                        Left = "10mm",
-                        Right = "10mm"
-                    },
-                    Scale = 1.0m
-                };
-
-                Console.WriteLine("🖨️ Tạo PDF với các tùy chọn A4 + background + margin");
-
-                var pdfBytes = await page.PdfDataAsync(pdfOptions);
+                // Generate PDF bytes
+                byte[] pdfBytes = document.GeneratePdf();
                 Console.WriteLine($"✅ PDF tạo thành công ({pdfBytes.Length} bytes)");
 
                 return pdfBytes;
