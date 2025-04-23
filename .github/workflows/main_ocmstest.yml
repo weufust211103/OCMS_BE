@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: read # This is required for actions/checkout
-      security-events: write # This is required for security scans
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -34,11 +34,6 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln
 
-      - name: Install Chromium
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser
-
       - name: Run tests
         run: dotnet test ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln --no-restore --verbosity normal
 
@@ -54,12 +49,18 @@ jobs:
         uses: github/codeql-action/analyze@v3
 
       - name: dotnet publish
-        run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" /p:DebugSymbols=false /p:DebugType=None
+        run: dotnet publish ./OCMS_WebAPI_Solution/OCMS_WebAPI_Solution.sln -c Release -o "${{env.DOTNET_ROOT}}/myapp" --self-contained --runtime win-x64 /p:DebugSymbols=false /p:DebugType=None
+
+      - name: Debug artifact contents before removal
+        run: ls -R "${{env.DOTNET_ROOT}}/myapp"
 
       - name: Remove unnecessary files
         run: |
           rm -f "${{env.DOTNET_ROOT}}/myapp/*.pdb"
           rm -rf "${{env.DOTNET_ROOT}}/myapp/ref"
+
+      - name: Debug artifact contents after removal
+        run: ls -R "${{env.DOTNET_ROOT}}/myapp"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -85,6 +86,9 @@ jobs:
           name: .net-app
           path: .net-app
 
+      - name: Debug deployed files
+        run: ls -R .net-app
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -99,6 +103,19 @@ jobs:
           app-name: 'ocmstest'
           slot-name: 'Production'
           package: .net-app
+          app-settings-json: |
+            [
+              {
+                "name": "ASPNETCORE_ENVIRONMENT",
+                "value": "Production",
+                "slotSetting": false
+              },
+              {
+                "name": "ASPNETCORE_LOGGING__CONSOLE__DISABLECOLORS",
+                "value": "true",
+                "slotSetting": false
+              }
+            ]
 
       - name: Log deployment status
         if: always()
