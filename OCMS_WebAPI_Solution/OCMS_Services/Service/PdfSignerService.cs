@@ -131,10 +131,8 @@ namespace OCMS_Services.Service
         }
         public async Task<byte[]> ConvertHtmlToPdfPuppet(string htmlContent)
         {
-            try
-            {
-                // Wrap HTML with fixed size and adjustments
-                htmlContent = $$"""
+            // Wrap HTML với kích thước cố định và các điều chỉnh
+            htmlContent = $$"""
 <!DOCTYPE html>
 <html>
 <head>
@@ -171,66 +169,45 @@ namespace OCMS_Services.Service
 </html>
 """;
 
-                // Define executable path
-                string executablePath = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-                    ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" // Adjust if your Chrome is elsewhere
-                    : Environment.GetEnvironmentVariable("PUPPETEER_EXECUTABLE_PATH") ?? "/usr/bin/chromium";
+            // Cấu hình kết nối tới Browserless.io
+            string apiKey = "SBWO5HqUBObzJndcfc2ee4a49c814df8ab832ad04f"; // Thay bằng API key thực tế của bạn
+            string browserWSEndpoint = $"wss://chrome.browserless.io?token={apiKey}";
 
-                var launchOptions = new LaunchOptions
-                {
-                    Headless = true,
-                    ExecutablePath = executablePath,
-                    Args = new[]
-                    {
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--font-render-hinting=none",
-                "--disable-web-security"
-            }
-                };
-
-                using var browser = await Puppeteer.LaunchAsync(launchOptions);
-                using var page = await browser.NewPageAsync();
-
-                await page.SetViewportAsync(new ViewPortOptions
-                {
-                    Width = 1240,
-                    Height = 1754,
-                    DeviceScaleFactor = 1.5
-                });
-
-                await page.SetContentAsync(htmlContent, new PuppeteerSharp.NavigationOptions
-                {
-                    WaitUntil = new[] { WaitUntilNavigation.Networkidle0 },
-                    Timeout = 60000
-                });
-
-                var pdfOptions = new PdfOptions
-                {
-                    Format = PuppeteerSharp.Media.PaperFormat.A4,
-                    PrintBackground = true,
-                    MarginOptions = new PuppeteerSharp.Media.MarginOptions
-                    {
-                        Top = "5mm",
-                        Bottom = "5mm",
-                        Left = "5mm",
-                        Right = "5mm"
-                    },
-                    Scale = 0.9m
-                };
-
-                byte[] pdfBytes = await page.PdfDataAsync(pdfOptions);
-                return pdfBytes;
-            }
-            catch (Exception ex)
+            // Kết nối tới browser của dịch vụ bên thứ ba
+            using var browser = await Puppeteer.ConnectAsync(new ConnectOptions
             {
-                Console.WriteLine($"❌ Error generating PDF: {ex.Message}");
-                if (ex.InnerException != null)
-                    Console.WriteLine($"Inner: {ex.InnerException.Message}");
-                throw;
-            }
+                BrowserWSEndpoint = browserWSEndpoint
+            });
+            using var page = await browser.NewPageAsync();
+
+            // Cấu hình viewport để render chính xác
+            await page.SetViewportAsync(new ViewPortOptions
+            {
+                Width = 1240,  // ~A4 width in pixels at 150dpi
+                Height = 1754, // ~A4 height in pixels at 150dpi
+                DeviceScaleFactor = 1.5
+            });
+
+            // Đặt nội dung HTML
+            await page.SetContentAsync(htmlContent);
+
+            // Tối ưu hóa cài đặt PDF
+            var pdfOptions = new PdfOptions
+            {
+                Format = PuppeteerSharp.Media.PaperFormat.A4,
+                PrintBackground = true,
+                MarginOptions = new PuppeteerSharp.Media.MarginOptions
+                {
+                    Top = "5mm",
+                    Bottom = "5mm",
+                    Left = "5mm",
+                    Right = "5mm"
+                },
+                Scale = 0.9m // Giảm tỷ lệ để nội dung vừa khít
+            };
+
+            byte[] pdfBytes = await page.PdfDataAsync(pdfOptions);
+            return pdfBytes;
         }
         private async Task<byte[]> ConvertHtmlToPdf(string htmlContent)
         {
