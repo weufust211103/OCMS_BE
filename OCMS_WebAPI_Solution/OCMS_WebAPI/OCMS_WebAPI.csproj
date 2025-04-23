@@ -26,6 +26,10 @@
 	<ItemGroup>
 		<PackageReference Include="Syncfusion.HtmlToPdfConverter.Net.Windows" Version="29.1.39" />
 	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="AngleSharp" Version="1.3.0" />
+	</ItemGroup>
 <ItemGroup>
   <Content Include="BlinkBinariesWindows\**">
     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

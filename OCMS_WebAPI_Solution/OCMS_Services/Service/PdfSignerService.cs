@@ -8,6 +8,8 @@ using System.Text.Json;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using HtmlAgilityPack;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 using System.Text.RegularExpressions;
 using Syncfusion.HtmlConverter;
@@ -15,6 +17,10 @@ using Syncfusion.Pdf;
 using Syncfusion.Pdf.Graphics;
 using System.IO;
 using System.Drawing;
+using System;
+using Microsoft.Extensions.Configuration;
+using AngleSharp;
+using AngleSharp.Html.Parser;
 namespace OCMS_Services.Service
 {
     public class PdfSignerService : IPdfSignerService
@@ -78,88 +84,158 @@ namespace OCMS_Services.Service
             response.EnsureSuccessStatusCode();
             return await response.Content.ReadAsStringAsync();
         }
+
         private async Task<byte[]> ConvertHtmlToPdf(string htmlContent)
         {
-            // Wrap HTML với kích thước cố định và điều chỉnh
-            htmlContent = $$"""
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        @page {
-            size: A4;
-            margin: 0;
+            try
+            {
+                // Log the HTML content for debugging Console.WriteLine("HTML Content to Convert:");
+                Console.WriteLine(htmlContent);
+                // Test with minimal content if the original HTML is invalid
+                string contentToConvert = htmlContent;
+                if (string.IsNullOrWhiteSpace(htmlContent) || !htmlContent.Contains("<"))
+                {
+                    Console.WriteLine("⚠️ HTML content is empty or invalid, using test content.");
+                    contentToConvert = "<p>Test PDF Content</p>";
+                }
+
+                // Parse the HTML content using AngleSharp
+                var config = Configuration.Default;
+                var context = BrowsingContext.New(config);
+                var parser = context.GetService<IHtmlParser>();
+                var document = await parser.ParseDocumentAsync(contentToConvert);
+
+                // Create a MemoryStream to store the PDF
+                using var stream = new MemoryStream();
+
+                // Configure QuestPDF settings
+                QuestPDF.Settings.License = LicenseType.Community;
+
+                // Create the PDF document
+                Document.Create(container =>
+                {
+                    container.Page(page =>
+                    {
+                        page.Size(PageSizes.A4); // A4 size
+                        page.Margin(5, Unit.Millimetre); // 5mm margins
+                        page.DefaultTextStyle(x => x.FontSize(12).FontFamily("Roboto")); // Default font and size
+
+                        page.Content().Padding(20).Element(content =>
+                        {
+                            // Main certificate container (equivalent to .certificate: 900x650px)
+                            content.Width(900).MinHeight(650).Border(2).BorderColor(Colors.Black).Column(column =>
+                            {
+                                // Header (equivalent to .header)
+                                column.Item().Row(row =>
+                                {
+                                    row.RelativeItem().Text(document.QuerySelector(".header-left")?.TextContent?.Trim() ?? "")
+                                        .FontSize(12).LineHeight(1.5f);
+                                    row.RelativeItem().AlignRight().Text(document.QuerySelector(".header-right")?.TextContent?.Trim() ?? "")
+                                        .FontSize(12).LineHeight(1.5f);
+                                });
+
+                                column.Item().Height(20); // Margin-bottom: 20px
+
+                                // Title (equivalent to .title)
+                                column.Item().AlignCenter().Text(document.QuerySelector(".title")?.TextContent?.Trim() ?? "")
+                                    .FontSize(24).Bold();
+
+                                column.Item().Height(20); // Margin-bottom: 20px
+
+                                // Content (equivalent to .content)
+                                column.Item().Row(row =>
+                                {
+                                    // Photo (equivalent to .photo)
+                                    var imgElement = document.QuerySelector(".photo img");
+                                    if (imgElement != null)
+                                    {
+                                        var src = imgElement.GetAttribute("src");
+                                        if (!string.IsNullOrEmpty(src) && src.StartsWith("data:image"))
+                                        {
+                                            var base64String = src.Split(',')[1];
+                                            var imageBytes = Convert.FromBase64String(base64String);
+                                            row.ConstantItem(150).Element(photo =>
+                                            {
+                                                photo.Image(imageBytes).FitArea();
+                                                photo.Border(1).BorderColor(Colors.Black);
+                                            });
+                                        }
+                                    }
+
+                                    row.ConstantItem(20); // Margin-right: 20px
+
+                                    // Details (equivalent to .details)
+                                    row.RelativeItem().Column(details =>
+                                    {
+                                        foreach (var line in document.QuerySelector(".details")?.ChildNodes.Where(n => n.NodeType == AngleSharp.Dom.NodeType.Text ) ?? Enumerable.Empty<AngleSharp.Dom.INode>())
+                                        {
+                                            if (line.NodeType == AngleSharp.Dom.NodeType.Text)
+                                            {
+                                                var text = line.TextContent.Trim();
+                                                if (!string.IsNullOrEmpty(text))
+                                                {
+                                                    details.Item().Text(text).FontSize(16).LineHeight(1.6f);
+                                                }
+                                            }
+                                        }
+                                    });
+                                });
+
+                                column.Item().Height(20); // Margin-bottom: 20px
+
+                                // Signature section (equivalent to .signature-section)
+                                column.Item().AlignRight().Width(300).Column(signature =>
+                                {
+                                    signature.Item().AlignCenter()
+                                        .Text(document.QuerySelector(".signature-area")?.TextContent?.Trim() ?? "")
+                                        .FontSize(12)
+                                        .LineHeight(1.5f);
+
+                                    signature.Item().Height(10); // Margin-bottom: 10px
+
+                                    signature.Item().AlignCenter()
+                                        .Width(250).Height(60)
+                                        .Border(1)
+                                        .BorderColor(Colors.Grey.Lighten2)
+                                        .Background(Colors.White) // Optional: ensures content stands out
+                                        .AlignMiddle().AlignCenter()
+                                        .Text("Vùng dành cho chữ ký số")
+                                        .FontSize(10)
+                                        .FontColor(Colors.Grey.Medium);
+                                });
+
+                                // Footer (equivalent to .footer)
+                                column.Item().PaddingTop(20).Row(footer =>
+                                {
+                                    footer.RelativeItem().Text(document.QuerySelector(".footer div:first-child")?.TextContent?.Trim() ?? "")
+                                        .FontSize(12);
+                                    footer.RelativeItem().AlignRight().Text(document.QuerySelector(".footer div:last-child")?.TextContent?.Trim() ?? "")
+                                        .FontSize(12);
+                                });
+                            });
+                        });
+                    });
+                }).GeneratePdf(stream);
+
+                // Reset stream position and return byte array
+                stream.Position = 0;
+                byte[] pdfBytes = stream.ToArray();
+                Console.WriteLine($"✅ PDF tạo thành công ({pdfBytes.Length} bytes)");
+                return pdfBytes;
+            }
+            catch (Exception ex)
+            {
+                // Log the overall error
+                Console.WriteLine($"PDF generation error: {ex.Message}");
+                if (ex.InnerException != null)
+                    Console.WriteLine($"Inner error: {ex.InnerException.Message}");
+                throw;
+            }
         }
-        body {
-            margin: 0;
-            padding: 0;
-            font-size: 10pt;
-            width: 100%;
-            box-sizing: border-box;
-        }
-        .pdf-container {
-            width: 1123px; /* A4 landscape */
-            height: 794px;
-            padding: 40px;
-            box-sizing: border-box;
-            position: relative;
-        }
-        img {
-            max-width: 100%;
-            height: auto;
-        }
-    </style>
-</head>
-<body>
-    <div class="pdf-container">
-        {{htmlContent}}
-    </div>
-</body>
-</html>
-""";
+    #endregion
 
-            // Tạo các cài đặt cho HTML converter
-            HtmlToPdfConverter htmlConverter = new HtmlToPdfConverter();
-            BlinkConverterSettings settings = new BlinkConverterSettings();
-
-            // Cấu hình các tùy chọn
-            settings.ViewPortSize = new Syncfusion.Drawing.Size(1240, 1754);
-            settings.EnableJavaScript = true;
-            
-
-            // Thiết lập PDF options
-            PdfDocument document = new PdfDocument();
-            PdfPageSettings pageSettings = new PdfPageSettings();
-            pageSettings.Size = PdfPageSize.A4;
-            pageSettings.Margins.All = 5; // 5mm
-            document.PageSettings = pageSettings;
-
-            // Điều chỉnh tỷ lệ hiển thị (scale)
-            settings.Scale = 0.9f;
-
-            // Áp dụng cài đặt
-            htmlConverter.ConverterSettings = settings;
-
-            // Chuyển đổi HTML thành PDF
-            PdfDocument pdfDocument = await Task.Run(() => htmlConverter.Convert(htmlContent, string.Empty));
-
-            // Lưu PDF vào memory stream
-            MemoryStream stream = new MemoryStream();
-            pdfDocument.Save(stream);
-
-            // Reset position của stream về 0
-            stream.Position = 0;
-
-            // Đóng document để giải phóng tài nguyên
-            pdfDocument.Close(true);
-
-            // Trả về byte array
-            return stream.ToArray();
-        }
-        #endregion
-
-        #region Sign Pdf
-        public async Task<byte[]> SignPdfAsync(string certificateId, string approvedByUserId)
+    #region Sign Pdf
+    public async Task<byte[]> SignPdfAsync(string certificateId, string approvedByUserId)
         {
             // Step 1: Validate input and dependencies
             if (string.IsNullOrWhiteSpace(certificateId))
